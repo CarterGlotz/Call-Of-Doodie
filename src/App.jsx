@@ -59,6 +59,8 @@ const TIPS = [
   "Tip: Press 5 for grenade (the spicy option)", "Tip: Pause to read the Bestiary. Know your enemy.",
   "Tip: Landlords are tanky AND ranged. Evict them fast.", "Tip: Crypto Bros zigzag like the market. HODL your aim.",
   "Tip: Kill milestones unlock bragging rights at 25/50/100+",
+  "Tip: You only get 3 respawns per match. Spend them wisely.",
+  "Tip: Instant Death mode = one life. Maximum clout, maximum rage.",
 ];
 
 const ACHIEVEMENTS = [
@@ -90,6 +92,8 @@ const ACHIEVEMENTS = [
   { id: "landlord", name: "Eviction Notice", desc: "Defeat a Landlord", emoji: "🏠", check: (s) => s.landlordKills >= 1, tier: "silver" },
   { id: "crypto", name: "Market Correction", desc: "Defeat 10 Crypto Bros", emoji: "📉", check: (s) => s.cryptoKills >= 10, tier: "bronze" },
   { id: "survive_5m", name: "Patience of a Saint", desc: "Survive 5 minutes", emoji: "⏱️", check: (s) => s.timeSurvived >= 300, tier: "silver" },
+  { id: "instant_death_w5", name: "Built Different", desc: "Reach wave 5 in Instant Death mode", emoji: "☠️", check: (s) => s.instantDeath && s.wave >= 5, tier: "gold" },
+  { id: "instant_death_w10", name: "One Life Legend", desc: "Reach wave 10 in Instant Death mode", emoji: "💀", check: (s) => s.instantDeath && s.wave >= 10, tier: "legendary" },
 ];
 
 const GRENADE_COOLDOWN = 8000;
@@ -98,6 +102,7 @@ const DASH_SPEED = 18;
 const DASH_DURATION = 8;
 const CRIT_CHANCE = 0.15;
 const CRIT_MULT = 2.0;
+const MAX_RESPAWNS = 3;
 
 const KILL_MILESTONES = {
   25: "Novice Exterminator",
@@ -174,6 +179,8 @@ export default function CallOfDoodie() {
   const [hoveredTool, setHoveredTool] = useState(null);
   const [showAchievements, setShowAchievements] = useState(false);
   const [pauseView, setPauseView] = useState("main");
+  const [respawnsLeft, setRespawnsLeft] = useState(MAX_RESPAWNS);
+  const [instantDeath, setInstantDeath] = useState(false);
 
   const currentWeaponRef = useRef(0);
   const isReloadingRef = useRef(false);
@@ -221,8 +228,11 @@ export default function CallOfDoodie() {
   const GW = () => sizeRef.current.w;
   const GH = () => sizeRef.current.h;
 
+  const instantDeathRef = useRef(false);
+  useEffect(() => { instantDeathRef.current = instantDeath; }, [instantDeath]);
+
   const checkAchievements = useCallback((gs) => {
-    const s = { kills: gs.kills, wave: gs.currentWave, maxCombo: comboRef.current.max, bestStreak: statsRef.current.bestStreak, nukes: statsRef.current.nukes, bossKills: statsRef.current.bossKills, dashes: statsRef.current.dashes, score: gs.score, grenades: statsRef.current.grenades, totalDamage: gs.totalDamage || 0, level: xpRef.current.level, crits: statsRef.current.crits, landlordKills: statsRef.current.landlordKills, cryptoKills: statsRef.current.cryptoKills, timeSurvived: Math.floor((Date.now() - startTimeRef.current) / 1000) };
+    const s = { kills: gs.kills, wave: gs.currentWave, maxCombo: comboRef.current.max, bestStreak: statsRef.current.bestStreak, nukes: statsRef.current.nukes, bossKills: statsRef.current.bossKills, dashes: statsRef.current.dashes, score: gs.score, grenades: statsRef.current.grenades, totalDamage: gs.totalDamage || 0, level: xpRef.current.level, crits: statsRef.current.crits, landlordKills: statsRef.current.landlordKills, cryptoKills: statsRef.current.cryptoKills, timeSurvived: Math.floor((Date.now() - startTimeRef.current) / 1000), instantDeath: instantDeathRef.current };
     ACHIEVEMENTS.forEach(a => {
       if (!achievedRef.current.has(a.id) && a.check(s)) {
         achievedRef.current.add(a.id);
@@ -354,6 +364,7 @@ export default function CallOfDoodie() {
     setBestStreak(0); setTotalDamage(0); setSubmitted(false); setLastWords("");
     setAchievementsUnlocked([]); setAchievementPopup(null); setTimeSurvived(0);
     setPaused(false); setHoveredTool(null);
+    setRespawnsLeft(instantDeath ? 0 : MAX_RESPAWNS);
     currentWeaponRef.current = 0; isReloadingRef.current = false;
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = setInterval(() => {
@@ -837,6 +848,8 @@ export default function CallOfDoodie() {
   };
 
   const respawn = () => {
+    if (respawnsLeft <= 0) return;
+    setRespawnsLeft(r => r - 1);
     const gs = gsRef.current, W = GW(), H = GH();
     if (gs) {
       gs.player.health=100; gs.player.x=W/2; gs.player.y=H/2; gs.player.invincible=60;
@@ -861,6 +874,7 @@ export default function CallOfDoodie() {
       rank: RANK_NAMES[Math.min(Math.floor(kills/10), RANK_NAMES.length-1)],
       bestStreak, totalDamage, level, time: fmtTime(timeSurvived),
       achievements: achievementsUnlocked.length,
+      mode: instantDeath ? "instant" : "standard",
     };
     const board = await saveToLeaderboard(entry);
     setLeaderboard(board); setSubmitted(true);
@@ -1019,6 +1033,7 @@ export default function CallOfDoodie() {
             <div>💊 <strong style={{color:"#FF6B35"}}>Pickups:</strong> Enemies drop health, ammo, speed, or nukes</div>
             <div>⚠️ <strong style={{color:"#FF6B35"}}>Ranged Foes:</strong> Glowing ring enemies shoot at you!</div>
             <div>💨 <strong style={{color:"#FF6B35"}}>Dash:</strong> Brief invincibility to dodge through danger</div>
+            <div>💚 <strong style={{color:"#FF6B35"}}>Respawns:</strong> {MAX_RESPAWNS} per match in Standard, 0 in Instant Death</div>
             <div>⬆ <strong style={{color:"#FF6B35"}}>XP & Levels:</strong> Level up from kills to move faster</div>
             <div>🏆 <strong style={{color:"#FF6B35"}}>Leaderboard:</strong> Submit your score with famous last words</div>
           </div>
@@ -1094,7 +1109,10 @@ export default function CallOfDoodie() {
         <div style={{textAlign:"center",maxWidth:320,width:"100%"}}>
           <div style={{fontSize:36,marginBottom:4}}>⏸</div>
           <h2 style={{color:"#FFD700",fontSize:28,margin:"0 0 4px",letterSpacing:3,fontFamily:"'Courier New',monospace"}}>PAUSED</h2>
-          <p style={{color:"#CCC",fontSize:12,margin:"0 0 20px",fontFamily:"'Courier New',monospace"}}>Wave {wave} · {fmtTime(timeSurvived)} · Score: {score.toLocaleString()}</p>
+          <p style={{color:"#CCC",fontSize:12,margin:"0 0 6px",fontFamily:"'Courier New',monospace"}}>Wave {wave} · {fmtTime(timeSurvived)} · Score: {score.toLocaleString()}</p>
+          <p style={{color:instantDeath?"#FF4444":"#8F8",fontSize:11,margin:"0 0 20px",fontFamily:"'Courier New',monospace"}}>
+            {instantDeath ? "☠️ INSTANT DEATH — No respawns" : "💚 " + respawnsLeft + "/" + MAX_RESPAWNS + " respawns left"}
+          </p>
           <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
             <button onClick={()=>{setPauseView("main");setPaused(false);}} style={{...pBtn,background:"linear-gradient(180deg,#FF6B35,#CC4400)",border:"none",fontSize:18}}>▶ RESUME</button>
             <button onClick={()=>setPauseView("rules")} style={pBtn}>📜 RULES</button>
@@ -1133,6 +1151,31 @@ export default function CallOfDoodie() {
                 <span style={{color:"#BBB",fontSize:10,fontStyle:"italic"}}>{w.desc}</span>
               </div>
             ))}
+          </div>
+          <div style={{...card,margin:"12px 0",padding:"12px 16px",border:instantDeath?"1px solid rgba(255,0,0,0.3)":"1px solid rgba(255,255,255,0.1)",background:instantDeath?"rgba(255,0,0,0.06)":"rgba(255,255,255,0.05)"}}>
+            <div style={{fontSize:12,color:"#DDD",marginBottom:8,letterSpacing:2,textAlign:"center",fontWeight:700}}>GAME MODE</div>
+            <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
+              <button onClick={()=>setInstantDeath(false)} style={{
+                padding:"10px 18px",fontSize:13,fontWeight:900,fontFamily:"'Courier New',monospace",
+                background:!instantDeath?"rgba(0,255,100,0.15)":"rgba(255,255,255,0.05)",
+                color:!instantDeath?"#0F0":"#999",
+                border:!instantDeath?"2px solid rgba(0,255,100,0.4)":"1px solid rgba(255,255,255,0.15)",
+                borderRadius:6,cursor:"pointer",flex:1,maxWidth:180,
+              }}>
+                <div>💚 STANDARD</div>
+                <div style={{fontSize:10,fontWeight:400,marginTop:2,color:!instantDeath?"#8F8":"#777"}}>{MAX_RESPAWNS} respawns per match</div>
+              </button>
+              <button onClick={()=>setInstantDeath(true)} style={{
+                padding:"10px 18px",fontSize:13,fontWeight:900,fontFamily:"'Courier New',monospace",
+                background:instantDeath?"rgba(255,0,0,0.15)":"rgba(255,255,255,0.05)",
+                color:instantDeath?"#FF4444":"#999",
+                border:instantDeath?"2px solid rgba(255,0,0,0.4)":"1px solid rgba(255,255,255,0.15)",
+                borderRadius:6,cursor:"pointer",flex:1,maxWidth:180,
+              }}>
+                <div>☠️ INSTANT DEATH</div>
+                <div style={{fontSize:10,fontWeight:400,marginTop:2,color:instantDeath?"#F88":"#777"}}>No respawns. One life.</div>
+              </button>
+            </div>
           </div>
           <div style={{display:"flex",gap:10,justifyContent:"center",flexWrap:"wrap",marginBottom:14}}>
             <button onClick={startGame} style={{...btnP,minWidth:150}}>DEPLOY</button>
@@ -1225,8 +1268,23 @@ export default function CallOfDoodie() {
               <div style={{color:"#CCC",fontSize:11,marginTop:4}}>Your shame is now public knowledge.</div>
             </div>
           )}
+          {instantDeath ? (
+            <div style={{...card,marginBottom:10,border:"1px solid rgba(255,0,0,0.3)",background:"rgba(255,0,0,0.06)",padding:"10px 14px"}}>
+              <div style={{fontSize:14,color:"#FF4444",fontWeight:900,letterSpacing:2}}>☠️ INSTANT DEATH MODE ☠️</div>
+              <div style={{fontSize:11,color:"#FF8888",marginTop:4}}>No respawns. You chose this.</div>
+            </div>
+          ) : (
+            <div style={{marginBottom:10,fontSize:13,color:respawnsLeft>0?"#CCC":"#FF4444"}}>
+              Respawns remaining: {[...Array(MAX_RESPAWNS)].map((_,i)=>(
+                <span key={i} style={{fontSize:16,marginLeft:3}}>{i<respawnsLeft?"💚":"🖤"}</span>
+              ))}
+              {respawnsLeft<=0 && <div style={{fontSize:11,color:"#FF6666",marginTop:4}}>No respawns left. Game over for real.</div>}
+            </div>
+          )}
           <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-            <button onClick={respawn} style={{...btnP,minWidth:110,fontSize:15}}>RESPAWN</button>
+            {!instantDeath && respawnsLeft > 0 && (
+              <button onClick={respawn} style={{...btnP,minWidth:110,fontSize:15}}>RESPAWN ({respawnsLeft})</button>
+            )}
             <button onClick={()=>{refreshLeaderboard();setShowLeaderboard(true);}} style={{...btnS,minWidth:130,fontSize:15}}>LEADERBOARD</button>
             <button onClick={()=>setScreen("menu")} style={{...btnS,minWidth:110,fontSize:15}}>RAGE QUIT</button>
           </div>
@@ -1265,6 +1323,9 @@ export default function CallOfDoodie() {
           <div style={{fontSize:10,color:"#CCC",textAlign:"right"}}>SCORE</div>
           <div style={{fontSize:20,fontWeight:900,color:"#FFD700",textAlign:"right"}}>{score.toLocaleString()}</div>
           <div style={{fontSize:10,color:"#DDD",textAlign:"right"}}>K:<span style={{color:"#0F0"}}>{kills}</span> D:<span style={{color:"#F44"}}>{deaths}</span></div>
+          <div style={{fontSize:10,textAlign:"right",marginTop:2,color:instantDeath?"#FF4444":"#CCC"}}>
+            {instantDeath ? "☠️ ONE LIFE" : <>{"💚".repeat(respawnsLeft)}{"🖤".repeat(MAX_RESPAWNS - respawnsLeft)}</>}
+          </div>
         </div>
         {combo>=2 && (
           <div style={{position:"absolute",top:28,left:"50%",transform:"translateX(-50%)",textAlign:"center"}}>
